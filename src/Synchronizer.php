@@ -3,8 +3,11 @@
 namespace DockerHostManager;
 
 use Docker\API\Model\ContainersIdJsonGetResponse200;
+use Docker\API\Model\Container;
+use Docker\Manager\ContainerManager;
 use DockerHostManager\Docker\Docker;
 use DockerHostManager\Docker\Event;
+use Symfony\Component\Console\Output\OutputInterface;
 
 class Synchronizer
 {
@@ -20,6 +23,9 @@ class Synchronizer
 
     /** @var ContainersIdJsonGetResponse200[] */
     private $activeContainers = [];
+    /** @var OutputInterface */
+    private $output = false;
+    private $oldHostsLines = [];
 
     /**
      * @param Docker $docker
@@ -86,6 +92,27 @@ class Synchronizer
 
     private function write()
     {
+        $hostsLines = array_map(
+            function ($container) {
+                return implode("\n", $this->getHostsLines($container));
+            },
+            $this->activeContainers
+        );
+        if ($this->output !== false) {
+            $removed = array_diff($this->oldHostsLines, $hostsLines);
+            $added = array_diff($hostsLines,$this->oldHostsLines);
+            if(count($removed)) {
+                $this->output->write('removed: ');
+                $this->output->writeln($removed);
+            }
+            if(count($added)) {
+                $this->output->write('added: ');
+                $this->output->writeln($added);
+            }
+
+        }
+        $this->oldHostsLines = $hostsLines;
+
         $content = array_map('trim', file($this->hostsFile));
         $res = preg_grep('/^'.self::START_TAG.'/', $content);
         $start = count($res) ? key($res) : count($content) + 1;
@@ -93,12 +120,7 @@ class Synchronizer
         $end = count($res) ? key($res) : count($content) + 1;
         $hosts = array_merge(
             [self::START_TAG],
-            array_map(
-                function ($container) {
-                    return implode("\n", $this->getHostsLines($container));
-                },
-                $this->activeContainers
-            ),
+            $hostsLines,
             [self::END_TAG]
         );
         array_splice($content, $start, $end - $start + 1, $hosts);
@@ -157,5 +179,9 @@ class Synchronizer
         }
 
         return true === $container->getState()->getRunning();
+    }
+
+    public function setOutputInterface(OutputInterface $output) {
+        $this->output=$output;
     }
 }
