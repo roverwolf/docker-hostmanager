@@ -15,7 +15,7 @@ Project homepage: [https://github.com/iamluc/docker-hostmanager](https://github.
 The easiest way is to use the docker image
 
 ```console
-$ docker run -d --name docker-hostmanager --restart=always -v /var/run/docker.sock:/var/run/docker.sock -v /etc/hosts:/hosts iamluc/docker-hostmanager
+$ docker run -d --name docker-hostmanager --restart=always -v /var/run/docker.sock:/var/run/docker.sock -v /etc/hosts:/hosts wwmdt/docker-hostmanager
 ```
 
 *Note: the `--restart=always` option will make the container start automatically with your computer (recommended).*

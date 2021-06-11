@@ -41,6 +41,7 @@ class SynchronizeHostsCommand extends Command
             $input->getOption('tld')
         );
 
+        $app->setOutputInterface($output);
         $app->run();
     }
 }

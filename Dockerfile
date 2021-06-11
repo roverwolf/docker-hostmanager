@@ -6,7 +6,7 @@ RUN composer install --working-dir=/app --ignore-platform-reqs --no-interaction 
 
 FROM alpine:3.7
 
-RUN apk add --no-cache \
+RUN apk add --no-update --no-cache \
 	php7 \
 	php7-cli \
 	php7-iconv \
