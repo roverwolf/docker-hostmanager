@@ -2,50 +2,33 @@
 
 namespace DockerHostManager\Docker;
 
-use Docker\API\Normalizer\NormalizerFactory;
+use Docker\API\Model\EventMessage;
 use Docker\Docker as DockerBase;
-use Docker\DockerClientFactory;
-use Http\Client\HttpClient;
-use Http\Message\MessageFactory;
-use Http\Message\MessageFactory\GuzzleMessageFactory;
-use Symfony\Component\Serializer\Encoder\JsonDecode;
-use Symfony\Component\Serializer\Encoder\JsonEncode;
-use Symfony\Component\Serializer\Encoder\JsonEncoder;
-use Symfony\Component\Serializer\Serializer;
 
 class Docker extends DockerBase
 {
-    public function __construct(HttpClient $httpClient = null, Serializer $serializer = null, MessageFactory $messageFactory = null)
-    {
-        $httpClient = $httpClient ?: DockerClientFactory::createFromEnv();
-        $serializer = $serializer ?:  $serializer = new Serializer(
-            NormalizerFactory::create(),
-            [
-                new JsonEncoder(
-                    new JsonEncode(),
-                    new JsonDecode()
-                ),
-            ]
-        );
-        $messageFactory = $messageFactory ?: new GuzzleMessageFactory();
-
-        parent::__construct($httpClient, $messageFactory, $serializer);
+    public static function create(
+        $httpClient = null,
+        array $additionalPlugins = [],
+        array $additionalNormalizers = [],
+        bool $applyServerPlugins = true
+    ): self {
+        return parent::create($httpClient, $additionalPlugins, $additionalNormalizers, $applyServerPlugins);
     }
 
-    /**
-     * @param callable $callback
-     */
-    public function listenEvents(callable $callback)
+    public function listenEvents(callable $callback): void
     {
-        $request = $this->messageFactory->createRequest('GET', '/events');
-        $response = $this->httpClient->sendRequest($request);
+        $events = $this->systemEvents([
+            'filters' => json_encode(['type' => ['container']], JSON_THROW_ON_ERROR),
+        ]);
 
-        $stream = $response->getBody();
-        while (!$stream->eof()) {
-            $line = \GuzzleHttp\Psr7\readline($stream);
-            if (null !== ($raw = json_decode($line, true))) {
-                call_user_func($callback, new Event($raw));
-            }
+        if (null === $events) {
+            throw new \RuntimeException('Failed to open Docker events stream.');
         }
+
+        $events->onFrame(function (EventMessage $message) use ($callback): void {
+            call_user_func($callback, new Event($message));
+        });
+        $events->wait();
     }
 }

@@ -2,9 +2,7 @@
 
 namespace DockerHostManager;
 
-use Docker\API\Model\ContainersIdJsonGetResponse200;
-use Docker\API\Model\Container;
-use Docker\Manager\ContainerManager;
+use Docker\API\Model\ContainerInspectResponse;
 use DockerHostManager\Docker\Docker;
 use DockerHostManager\Docker\Event;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -21,7 +19,7 @@ class Synchronizer
     /** @var string */
     private $tld;
 
-    /** @var ContainersIdJsonGetResponse200[] */
+    /** @var ContainerInspectResponse[] */
     private $activeContainers = [];
     /** @var OutputInterface */
     private $output = false;
@@ -127,18 +125,23 @@ class Synchronizer
         file_put_contents($this->hostsFile, implode("\n", $content));
     }
 
-    private function getHostsLines(ContainersIdJsonGetResponse200 $container): array
+    private function getHostsLines(ContainerInspectResponse $container): array
     {
         $lines = [];
 
-        // Global
-        if (!empty($container->getNetworkSettings()->getIPAddress())) {
-            $ip = $container->getNetworkSettings()->getIPAddress();
-            $lines[$ip] = implode(' ', $this->getContainerHosts($container));
+        $bridgeIp = $this->getDefaultNetworkIp($container);
+        if (null !== $bridgeIp) {
+            $lines[$bridgeIp] = implode(' ', $this->getContainerHosts($container));
+        }
+
+        $networkSettings = $container->getNetworkSettings();
+        $networks = $networkSettings?->getNetworks();
+        if (!is_iterable($networks)) {
+            $networks = [];
         }
 
         // Networks
-        foreach ($container->getNetworkSettings()->getNetworks() as $networkName => $conf) {
+        foreach ($networks as $networkName => $conf) {
             $ip = $conf->getIPAddress();
             $aliases = is_array($conf->getAliases()) ? $conf->getAliases() : [];
             $aliases[] = substr($container->getName(), 1);
@@ -158,7 +161,38 @@ class Synchronizer
         return $lines;
     }
 
-    private function getContainerHosts(ContainersIdJsonGetResponse200 $container): array
+    private function getDefaultNetworkIp(ContainerInspectResponse $container): ?string
+    {
+        $networkSettings = $container->getNetworkSettings();
+        if (null === $networkSettings) {
+            return null;
+        }
+
+        $networks = $networkSettings->getNetworks();
+        if (!is_iterable($networks)) {
+            return null;
+        }
+
+        foreach ($networks as $networkName => $conf) {
+            if ('bridge' === $networkName) {
+                $ip = $conf->getIPAddress();
+                if (!empty($ip)) {
+                    return $ip;
+                }
+            }
+        }
+
+        foreach ($networks as $conf) {
+            $ip = $conf->getIPAddress();
+            if (!empty($ip)) {
+                return $ip;
+            }
+        }
+
+        return null;
+    }
+
+    private function getContainerHosts(ContainerInspectResponse $container): array
     {
         $hosts = [substr($container->getName(), 1).$this->tld];
         if (is_array($container->getConfig()->getEnv())) {
@@ -172,9 +206,10 @@ class Synchronizer
         return $hosts;
     }
 
-    private function isExposed(ContainersIdJsonGetResponse200 $container): bool
+    private function isExposed(ContainerInspectResponse $container): bool
     {
-        if (empty($container->getNetworkSettings()->getPorts()) || empty($container->getState()->getRunning())) {
+        $ports = $container->getNetworkSettings()?->getPorts();
+        if (empty($ports) || empty($container->getState()?->getRunning())) {
             return false;
         }
 

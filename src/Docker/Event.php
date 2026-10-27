@@ -2,58 +2,55 @@
 
 namespace DockerHostManager\Docker;
 
+use Docker\API\Model\EventMessage;
+
 class Event
 {
-    /** @var string */
+    /** @var string|null */
     protected $status;
 
-    /** @var string */
+    /** @var string|null */
     protected $id;
 
-    /** @var string */
+    /** @var string|null */
     protected $from;
 
-    /** @var string */
+    /** @var int|string|null */
     protected $time;
 
-    /**
-     * @param string $raw
-     */
-    public function __construct($raw)
+    public function __construct(EventMessage|array $raw)
     {
-        $this->status = isset($raw['status']) ? $raw['status'] : null;
-        $this->id = isset($raw['id']) ? $raw['id'] : null;
-        $this->from = isset($raw['from']) ? $raw['from'] : null;
-        $this->time = isset($raw['time']) ? $raw['time'] : null;
+        if ($raw instanceof EventMessage) {
+            $this->status = $raw->getAction();
+            $this->id = $raw->getActor()?->getID();
+            $attributes = $raw->getActor()?->getAttributes();
+            $this->from = is_iterable($attributes) ? ($attributes['image'] ?? null) : null;
+            $this->time = $raw->getTime();
+
+            return;
+        }
+
+        $this->status = $raw['status'] ?? $raw['action'] ?? null;
+        $this->id = $raw['id'] ?? $raw['Actor']['ID'] ?? null;
+        $this->from = $raw['from'] ?? null;
+        $this->time = $raw['time'] ?? null;
     }
 
-    /**
-     * @return string
-     */
     public function getStatus()
     {
         return $this->status;
     }
 
-    /**
-     * @return string
-     */
     public function getId()
     {
         return $this->id;
     }
 
-    /**
-     * @return string
-     */
     public function getFrom()
     {
         return $this->from;
     }
 
-    /**
-     * @return string
-     */
     public function getTime()
     {
         return $this->time;

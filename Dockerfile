@@ -1,20 +1,23 @@
-FROM composer
+FROM composer:2 AS vendor
 
-ADD . /app/
+WORKDIR /app
 
-RUN composer install --working-dir=/app --ignore-platform-reqs --no-interaction --no-dev --prefer-dist --optimize-autoloader
+COPY composer.json composer.lock ./
 
-FROM alpine:3.7
+RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-scripts
 
-RUN apk add --no-update --no-cache \
-	php7 \
-	php7-cli \
-	php7-iconv \
-	php7-mbstring \
-	php7-intl \
-	php7-json
+COPY . .
 
-COPY --from=0 /app/ /usr/local/src/docker-hostmanager
+RUN composer dump-autoload --optimize --classmap-authoritative
+
+FROM php:8.5-cli-alpine
+
+RUN apk add --no-cache icu-libs \
+    && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS icu-dev \
+    && docker-php-ext-install -j"$(nproc)" intl \
+    && apk del .build-deps
+
+COPY --from=vendor /app /usr/local/src/docker-hostmanager
 
 ENV HOSTS_FILE=/hosts
 
