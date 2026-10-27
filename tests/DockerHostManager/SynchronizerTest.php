@@ -20,4 +20,19 @@ class SynchronizerTest extends TestCase
         $this->assertSame('docker', PropertyAccessor::getProperty($application, 'tld'));
         $this->assertIsArray(PropertyAccessor::getProperty($application, 'activeContainers'));
     }
+
+    public function testUnderscoreHostnamesAlsoGetDashVariants(): void
+    {
+        $method = new \ReflectionMethod(Synchronizer::class, 'uniqueHostnames');
+        $method->setAccessible(true);
+
+        $synchronizer = new Synchronizer($this->createMock(Docker::class), '/etc/hosts', '.docker');
+
+        $hostnames = $method->invoke($synchronizer, ['web.my_project_default', 'api.my_project_default']);
+
+        $this->assertSame(
+            ['web.my_project_default', 'web.my-project-default', 'api.my_project_default', 'api.my-project-default'],
+            $hostnames
+        );
+    }
 }

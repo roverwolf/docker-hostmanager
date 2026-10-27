@@ -151,7 +151,8 @@ class Synchronizer
                 $hosts[] = $alias.'.'.$networkName;
             }
 
-            $lines[$ip] = sprintf('%s%s', isset($lines[$ip]) ? $lines[$ip].' ' : '', implode(' ', $hosts));
+            $hostList = implode(' ', $this->uniqueHostnames($hosts));
+            $lines[$ip] = sprintf('%s%s', isset($lines[$ip]) ? $lines[$ip].' ' : '', $hostList);
         }
 
         array_walk($lines, function (&$host, $ip) {
@@ -203,7 +204,38 @@ class Synchronizer
             }
         }
 
-        return $hosts;
+        return $this->uniqueHostnames($hosts);
+    }
+
+    /**
+     * @return string[]
+     */
+    private function hostnameVariants(string $hostname): array
+    {
+        $variants = [$hostname];
+        $dashed = str_replace('_', '-', $hostname);
+        if ($dashed !== $hostname) {
+            $variants[] = $dashed;
+        }
+
+        return $variants;
+    }
+
+    /**
+     * @param string[] $hostnames
+     *
+     * @return string[]
+     */
+    private function uniqueHostnames(array $hostnames): array
+    {
+        $unique = [];
+        foreach ($hostnames as $hostname) {
+            foreach ($this->hostnameVariants($hostname) as $variant) {
+                $unique[$variant] = true;
+            }
+        }
+
+        return array_keys($unique);
     }
 
     private function isExposed(ContainerInspectResponse $container): bool
